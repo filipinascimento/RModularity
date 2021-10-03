@@ -1,6 +1,7 @@
 import RModularity
 import igraph as ig
 from pathlib import Path
+import pickle as pkl
 
 # This is needed to run the script using multiprocessing
 if __name__ == '__main__':
@@ -46,7 +47,6 @@ if __name__ == '__main__':
     # Plotting TPR and DL curves
 
     import numpy as np
-    import pickle as pkl
     import matplotlib.pyplot as plt
     import matplotlib.patches as mpl_patches
 
