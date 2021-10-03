@@ -4,14 +4,14 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="dbgz",
-    version="0.3.4",
+    name="RModularity",
+    version="0.1.0",
     author="Filipi N. Silva",
     author_email="filipi@iu.edu",
-    description="Python library to load DBGZ files",
+    description="Python library to calculate Robustness modularity of networks",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/filipinascimento/dbgz",
+    url="https://github.com/filipinascimento/RModularity",
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",

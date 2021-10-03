@@ -1,2 +1,4 @@
-
-
+louvain
+numpy
+python-igraph
+tqdm

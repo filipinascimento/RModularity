@@ -1,0 +1,13 @@
+name: RModularity
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.8
+  - graph-tool
+  - pip:
+    - louvain
+    - numpy
+    - python-igraph
+    - tqdm
+
