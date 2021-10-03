@@ -198,7 +198,7 @@ And finally, let's plot the information modularity along `p`:
                     avgDiffDLCurves+stdDiffDLCurves, alpha=0.2)
 
     ax.set_xlabel("$p$")
-    ax.set_ylabel("$$")
+    ax.set_ylabel("$Q_\mathrm{DL}$")
     ax.set_title(networkName)
     ax.set_xlim(-0.00, 1.02)
 

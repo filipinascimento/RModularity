@@ -3,6 +3,10 @@ import igraph as ig
 from pathlib import Path
 import pickle as pkl
 
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpl_patches
+
 # This is needed to run the script using multiprocessing
 if __name__ == '__main__':
     networkName = "road-euroroad"
@@ -45,10 +49,6 @@ if __name__ == '__main__':
                  DLCurvesTrivial, DLCurvesDetected), fd)
 
     # Plotting TPR and DL curves
-
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import matplotlib.patches as mpl_patches
 
     with open("%s%s.pkl" % (networkName, outputSuffix), "rb") as fd:
         Q_r, probabilities, TPRCurve, DLCurvesTrivial, DLCurvesDetected = pkl.load(
@@ -128,7 +128,7 @@ if __name__ == '__main__':
                     avgDiffDLCurves+stdDiffDLCurves, alpha=0.2)
 
     ax.set_xlabel("$p$")
-    ax.set_ylabel("$$")
+    ax.set_ylabel("$Q_{\mathrm{DL}}$")
     ax.set_title(networkName)
     ax.set_xlim(-0.00, 1.02)
 
