@@ -216,7 +216,7 @@ Please refer to the next section for more details on how to use this library.
 
 ## Full API documentation
 
-## <kbd>function</kbd> `RModularity`
+### <kbd>function</kbd> `RModularity`
 ```python
 RModularity(
     nodeCount,
@@ -234,22 +234,35 @@ RModularity(
 Computes the Robustness Modularity of a network. 
 
 Parameters 
----------- nodeCount : int  The number of nodes in the network. edges : list of tuples  A list of the edges in the network. directed : int, optional  Whether the network is directed or not. perturbationCount : int, optional  The number of perturbations to perform.  (defaults to 25) detectionTrials : int, optional  The number of times to perform community  detection for each perturbed network.  (defaults to 1) rewireResolution : int, optional  The number values points for the rewire  probabilities (from 0 to 1) to calculate  the Trivial Partition Ratio (TPR) curves  and Robustness Modularity.  (defaults to 51) outputCurves : bool, optional  Whether to save the TPR and DL curves.  (defaults to False) showProgress : bool, optional  Shows a progress bar if enabled.  (defaults to True) useMultiprocessing: bool, optional  Uses parallel processing to calculate  Rmodularity.  (defaults to True) Returns 
-------- float   The RModularity of the network. (float, np.array dim=1, np.array dim=1, np.array dim=2, np.array dim=2) if outputCurves is True  The tuple (RModularity, probabilities, TPR curves, DL Detected, DL Trivial) containing  the Robustness Modularity, the rewire probabilities, the TPR curves, the Description  lenghts for the detected and trivial partitions. 
+  * `nodeCount` : `int`  
+    The number of nodes in the network.
+  * `edges` : list of tuples  
+    A list of the edges in the network.
+  * `directed` : `int`, optional  
+    Whether the network is directed or not.
+  * `perturbationCount` : `int`, optional  
+    The number of perturbations to perform.  (defaults to 25)
+  * `detectionTrials` : `int`, optional  
+    The number of times to perform community  detection for each perturbed network. (defaults to 1)
+  * `rewireResolution` : `int`, optional  
+    The number values points for the rewire  probabilities (from 0 to 1) to calculate  the Trivial Partition Ratio (TPR) curves  and Robustness Modularity.(defaults to 51)
+  * `outputCurves` : `bool`, optional  
+Whether to save the TPR and DL curves. (defaults to False)
+  * `showProgress` : `bool`, optional  
+Shows a progress bar if enabled.  (defaults to True)
+  * `useMultiprocessing`: `bool`, optional  
+    Uses parallel processing to calculate  Rmodularity.  (defaults to True)
+
+Returns 
+  * `float` if `outputCurves` is `False`  
+    The Robustness Modularity of the network.
+  * `(float, np.array dim=1, np.array dim=1, np.array dim=2, np.array dim=2)` if `outputCurves` is `True`  
+    Returns a tuple of 4 values containing the Robustness Modularity, the rewire probabilities, the TPR curves, and the Description lenghts for the detected and trivial partitions. 
 
 
 ---
 
-## <kbd>function</kbd> `modularityNullmodel`
-
-```python
-modularityNullmodel(args)
-```
-
-
----
-
-## <kbd>function</kbd> `modularityDifference`
+### <kbd>function</kbd> `modularityDifference`
 
 ```python
 modularityDifference(
@@ -267,22 +280,45 @@ modularityDifference(
 Computes the Modularity Difference of a network. 
 
 Parameters 
----------- nodeCount : int  The number of nodes in the network. edges : list of tuples  A list of the edges in the network. directed : int, optional  Whether the network is directed or not. detectionTrials : int, optional  The number of times to perform community  detection for each perturbed network.  (defaults to 10) nullmodelCount : int, optional  The number of times to perform community  detection using nullmodels.  (defaults to 200) detectionTrialsNullModel : int, optional  The number of times to perform community  detection for each nullmodel realization.  (defaults to 200) showProgress : bool, optional  Shows a progress bar if enabled.  (defaults to True) Returns 
-------- float   The Modularity Difference of the network. 
+  * `nodeCount` : `int`  
+    The number of nodes in the network.
+  * `edges` : list of tuples  
+    A list of the edges in the network.
+  * `directed` : `int`, optional  
+    Whether the network is directed or not.
+  * `detectionTrials` : `int`, optional  
+    The number of times to perform community detection for the input network  (defaults to 100)
+  * `nullmodelCount` : `int`, optional  
+    The number of realizations of the null-model (configuration model) used to calculate the null-model modularity. (defaults to 100)
+  * `detectionTrialsNullModel` : `int`, optional  
+    The number of times to perform community detection for each perturbed network  (defaults to 10)
+  * `showProgress` : `bool`, optional  
+Shows a progress bar if enabled.  (defaults to True)
+  * `useMultiprocessing`: `bool`, optional  
+    Uses parallel processing to calculate  Rmodularity.  (defaults to True)
 
+Returns 
+  * `float`  
+    The Modularity Difference of the network.
+    
 
----
-
-
-## <kbd>function</kbd> `informationModularity`
+### <kbd>function</kbd> `informationModularity`
 
 ```python
 informationModularity(nodeCount, edges, directed=False)
 ```
 
- Computes the Information Modularity of a network. 
+Computes the Information Modularity of a network. 
 
 Parameters 
----------- nodeCount : int  The number of nodes in the network. edges : list of tuples  A list of the edges in the network. directed : int, optional  Whether the network is directed or not. Returns 
-------- float   The Information Modularity of the network. 
+  * `nodeCount` : `int`  
+    The number of nodes in the network.
+  * `edges` : list of tuples  
+    A list of the edges in the network.
+  * `directed` : `int`, optional  
+    Whether the network is directed or not.
 
+Returns 
+  * `float`  
+    The Information Modularity of the network.
+    
