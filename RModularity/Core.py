@@ -10,7 +10,7 @@ from tqdm.auto import tqdm, trange
 from collections import Counter
 import multiprocessing as mp
 import louvain
-
+import os
 
 def LouvainModularity(aNetwork):
     partition = louvain.find_partition(
@@ -60,6 +60,8 @@ def getMajorConnectedComponent(nodeCount, edges, directed=False):
 
 
 def calculatePerturbedTrivialCount(args):
+    #Reseeding
+    np.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
     trivialCount = 0
     nodeCount, edges, directed, probability, \
         detectionTrials = args
