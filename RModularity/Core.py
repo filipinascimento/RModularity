@@ -11,6 +11,8 @@ from collections import Counter
 import multiprocessing as mp
 import louvain
 import os
+import random
+
 
 def LouvainModularity(aNetwork):
     partition = louvain.find_partition(
@@ -60,7 +62,7 @@ def getMajorConnectedComponent(nodeCount, edges, directed=False):
 
 
 def calculatePerturbedTrivialCount(args):
-    #Reseeding
+    # Reseeding
     np.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
     trivialCount = 0
     nodeCount, edges, directed, probability, \
@@ -85,7 +87,7 @@ def RModularity(
     nodeCount,
     edges,
     directed=False,
-    perturbationCount=25,
+    perturbationCount=24,
     detectionTrials=1,
     rewireResolution=51,
     outputCurves=False,
@@ -105,7 +107,7 @@ def RModularity(
         Whether the network is directed or not.
     perturbationCount : int, optional
         The number of perturbations to perform.
-        (defaults to 25)
+        (defaults to 24)
     detectionTrials : int, optional
         The number of times to perform community
         detection for each perturbed network.
@@ -291,3 +293,354 @@ def informationModularity(
     _, DLDetected, DLTrivial = SBMMinimizeMembership(
         nodeCount, edges, directed)
     return 1-(DLDetected/DLTrivial)
+
+
+def RModularityFast(
+    nodeCount,
+    edges,
+    directed=False,
+    perturbationCount=24,
+    detectionTrials=1,
+    outputCurves=False,
+    showProgress=True,
+    useMultiprocessing=True,
+    coarseError = 0.02,
+    fineError=0.01,
+    minSimilarTrials=3,
+):
+    """
+    Computes the Robustness Modularity of a network.
+
+    Parameters
+    ----------
+    nodeCount : int
+        The number of nodes in the network.
+    edges : list of tuples
+        A list of the edges in the network.
+    directed : int, optional
+        Whether the network is directed or not.
+    perturbationCount : int, optional
+        The number of perturbations to perform.
+        (defaults to 24)
+    detectionTrials : int, optional
+        The number of times to perform community
+        detection for each perturbed network.
+        (defaults to 1)
+    outputCurves : bool, optional
+        Whether to save the TPR and DL curves.
+        (defaults to False)
+    showProgress : bool, optional
+        Shows a progress bar if enabled.
+        (defaults to True)
+    useMultiprocessing: bool, optional
+        Uses parallel processing to calculate
+        Rmodularity.
+        (defaults to True)
+    Returns
+    -------
+    float 
+        The RModularity of the network.
+    (float, np.array dim=1, np.array dim=1, np.array dim=2, np.array dim=2) if outputCurves is True
+        The tuple (RModularity, probabilities, TPR curves, DL Detected, DL Trivial) containing
+        the Robustness Modularity, the rewire probabilities, the TPR curves, the Description
+        lenghts for the detected and trivial partitions.
+    """
+    TPRCurve = []
+    DLCurvesDetected = []
+    DLCurvesTrivial = []
+    probabilities = []
+    sortedOrder = []
+
+    (nodeCount, edges) = getMajorConnectedComponent(
+        nodeCount, edges, directed)
+    if(useMultiprocessing):
+        num_processors = mp.cpu_count()
+        # Disabling internal multithreading of graph_tool
+        gtOpenmp_set_num_threads(1)
+    def calculateTPR(probability):
+        trivialCount = 0
+        DLCurvesDetectedSingle = np.zeros(detectionTrials*perturbationCount)
+        DLCurvesTrivialSingle = np.zeros(detectionTrials*perturbationCount)
+        if(useMultiprocessing):
+            allArgs = [(nodeCount, edges, directed, probability,
+                        detectionTrials)]*perturbationCount
+            perturbationIndex = 0
+
+            pool = mp.Pool(processes=num_processors)
+            for newTrivialCount, allDLDetected, allDLTrivial in \
+                tqdm(
+                    pool.imap_unordered(
+                        func=calculatePerturbedTrivialCount,
+                        iterable=allArgs
+                    ), 
+                    total=len(allArgs),
+                    desc="Perturbation", leave=False
+                ):
+                DLCurvesDetectedSingle[perturbationIndex*detectionTrials:(perturbationIndex+1)*detectionTrials] = allDLDetected
+                DLCurvesTrivialSingle[perturbationIndex*detectionTrials:(perturbationIndex+1)*detectionTrials] = allDLTrivial
+                trivialCount += newTrivialCount
+                perturbationIndex += 1
+            pool.terminate()
+            pool.close()
+        else:
+            for perturbationIndex in trange(0, perturbationCount, desc="Perturbation", leave=False):
+                args = (nodeCount, edges, directed,
+                        probability, detectionTrials)
+                newTrivialCount, allDLDetected, allDLTrivial = calculatePerturbedTrivialCount(
+                    args)
+                DLCurvesDetectedSingle[perturbationIndex*detectionTrials:(perturbationIndex+1)*detectionTrials] = allDLDetected
+                DLCurvesTrivialSingle[perturbationIndex*detectionTrials:(perturbationIndex+1)*detectionTrials] = allDLTrivial
+                trivialCount += newTrivialCount
+                perturbationIndex += 1
+        TPRValue = trivialCount / \
+            (perturbationCount*detectionTrials)
+        return TPRValue, DLCurvesDetectedSingle, DLCurvesTrivialSingle
+    
+    similarTrial = 0
+    lastRModularity = -1
+    currentRModularity = -1
+    def addPointProbability(probability,targetError):
+        nonlocal similarTrial,lastRModularity,TPRCurve,DLCurvesDetected,DLCurvesTrivial,sortedOrder,probabilities,currentRModularity
+        TPRValue, DLCurvesDetectedSingle, DLCurvesTrivialSingle = calculateTPR(probability)
+        probabilities.append(probability)
+        TPRCurve.append(TPRValue)
+        DLCurvesDetected.append(DLCurvesDetectedSingle)
+        DLCurvesTrivial.append(DLCurvesTrivialSingle)
+        sortedOrder = np.argsort(probabilities)
+        probabilities = [ probabilities[i] for i in sortedOrder ]
+        TPRCurve = [ TPRCurve[i] for i in sortedOrder ]
+        DLCurvesDetected = [ DLCurvesDetected[i] for i in sortedOrder ]
+        DLCurvesTrivial = [ DLCurvesTrivial[i] for i in sortedOrder ]
+        currentRModularity = 1.0-np.trapz(TPRCurve, probabilities)
+        absDiff = abs(currentRModularity-lastRModularity)/lastRModularity
+        lastRModularity = currentRModularity
+        if(absDiff < targetError):
+            similarTrial += 1
+        else:
+            similarTrial = 0
+        return absDiff
+    
+    pbar = tqdm(total = minSimilarTrials,leave=True)
+    pbar.set_description("Calculating for probabilty = 0")
+    addPointProbability(0,coarseError)
+    pbar.set_description("Calculating for probabilty = 1")
+    addPointProbability(1.0,coarseError)
+    fineRange = (0,1)
+    fineIterations = 0
+    while(True):
+        currentDeviation = 0.0
+        for probIndex in range(len(probabilities)-1):
+            probability = probabilities[probIndex]
+            nextProbability = probabilities[probIndex+1]
+            if(TPRCurve[probIndex]<1.0 and TPRCurve[probIndex+1]==1.0):
+                fineRange = (0,nextProbability)
+                print("Refine Range",(probability,nextProbability))
+                currentDeviation = addPointProbability((probability+nextProbability)*0.5,coarseError)
+                break
+        pbar.set_description("COARSE Phase. Deviation: %g (target=%g) Trials" % (currentDeviation,coarseError))
+        pbar.reset()
+        pbar.update(similarTrial)
+        
+        if(currentDeviation<coarseError):
+            break
+                
+
+    while(similarTrial<minSimilarTrials):
+        probability=random.random()*(fineRange[1]-fineRange[0])+fineRange[0]
+        absDiff = addPointProbability(probability,fineError)
+        pbar.set_description("FINE Phase. Deviation: %g (target=%g) Trials" % (absDiff,fineError))
+        pbar.reset()
+        pbar.update(similarTrial)
+    pbar.refresh()
+    pbar.close()
+    if(outputCurves):
+        return (currentRModularity, np.array(probabilities), np.array(TPRCurve), np.array(DLCurvesTrivial), np.array(DLCurvesDetected))
+    else:
+        return currentRModularity
+
+
+
+
+
+
+
+
+def RModularityFast2(
+    nodeCount,
+    edges,
+    directed=False,
+    perturbationCount=24,
+    detectionTrials=1,
+    showProgress=True,
+    useMultiprocessing=True,
+    coarseError = 0.02,
+    fineError=0.01,
+    minSimilarTrials=2,
+):
+    """
+    Computes the Robustness Modularity of a network.
+
+    Parameters
+    ----------
+    nodeCount : int
+        The number of nodes in the network.
+    edges : list of tuples
+        A list of the edges in the network.
+    directed : int, optional
+        Whether the network is directed or not.
+    perturbationCount : int, optional
+        The number of perturbations to perform.
+        (defaults to 24)
+    detectionTrials : int, optional
+        The number of times to perform community
+        detection for each perturbed network.
+        (defaults to 1)
+    outputCurves : bool, optional
+        Whether to save the TPR and DL curves.
+        (defaults to False)
+    showProgress : bool, optional
+        Shows a progress bar if enabled.
+        (defaults to True)
+    useMultiprocessing: bool, optional
+        Uses parallel processing to calculate
+        Rmodularity.
+        (defaults to True)
+    Returns
+    -------
+    float 
+        The RModularity of the network.
+    (float, np.array dim=1, np.array dim=1, np.array dim=2, np.array dim=2) if outputCurves is True
+        The tuple (RModularity, probabilities, TPR curves, DL Detected, DL Trivial) containing
+        the Robustness Modularity, the rewire probabilities, the TPR curves, the Description
+        lenghts for the detected and trivial partitions.
+    """
+    
+    sortedOrder = []
+
+    (nodeCount, edges) = getMajorConnectedComponent(
+        nodeCount, edges, directed)
+    if(useMultiprocessing):
+        num_processors = mp.cpu_count()
+        # Disabling internal multithreading of graph_tool
+        gtOpenmp_set_num_threads(1)
+    def calculateTPR(probabilities):
+        trivialCount = 0
+        #check if probabilities is a number
+        if(isinstance(probabilities,float) or isinstance(probabilities,int)):
+            probabilities = [probabilities]*perturbationCount
+
+        if(useMultiprocessing):
+            allArgs = [(nodeCount, edges, directed, probability,
+                        detectionTrials) for index, probability in enumerate(probabilities)]
+            perturbationIndex = 0
+
+            pool = mp.Pool(processes=num_processors)
+            for newTrivialCount, allDLDetected, allDLTrivial in \
+                tqdm(
+                    pool.imap_unordered(
+                        func=calculatePerturbedTrivialCount,
+                        iterable=allArgs
+                    ), 
+                    total=len(allArgs),
+                    desc="Perturbation", leave=False
+                ):
+                trivialCount += newTrivialCount
+                perturbationIndex += 1
+            pool.terminate()
+            pool.close()
+        else:
+            for perturbationIndex,probability in enumerate(trange(0, probabilities, desc="Perturbation", leave=False)):
+                args = (nodeCount, edges, directed,
+                        probability, detectionTrials)
+                newTrivialCount, allDLDetected, allDLTrivial = calculatePerturbedTrivialCount(
+                    args)
+                trivialCount += newTrivialCount
+                perturbationIndex += 1
+        TPRValue = trivialCount / \
+            (perturbationCount*detectionTrials)
+        return TPRValue
+    
+    similarTrial = 0
+    lastRModularity = -1
+    currentRModularity = -1
+    currentProbabilitiesRange = [0.0,1.0]
+    pbar = tqdm(total = minSimilarTrials,leave=True)
+    currentDeviation = 1.0
+    pbar.set_description("COARSE phase. Calculating TPR for 0.0 to 1.0.")
+        
+    currentTPRs = [calculateTPR(0.0),calculateTPR(1.0)]
+    threshold = 1.0
+    if(currentTPRs[0]<1.0 and currentTPRs[1]==1.0):
+        while(True):
+            threshold = (currentProbabilitiesRange[0]+currentProbabilitiesRange[1])*0.5
+            thresholdTPR = calculateTPR(threshold)
+            currentDeviation = abs(threshold-currentProbabilitiesRange[1])/currentProbabilitiesRange[1]
+            if(thresholdTPR==1.0):
+                currentProbabilitiesRange[1] = threshold
+            else:
+                currentProbabilitiesRange[0] = threshold
+            pbar.set_description("COARSE phase. Range: [%g - %g]. Deviation: %g (target=%g) Trials" % (currentProbabilitiesRange[0],currentProbabilitiesRange[1],currentDeviation,coarseError))
+            if(currentDeviation<coarseError):
+                break
+    elif(currentTPRs[0]==1.0):
+        return 0.0
+    
+    oldTPR = -1
+    trivialCount= 0
+    allPerturbationCount = 0
+    while(similarTrial<minSimilarTrials):
+        probabilities=np.random.random(perturbationCount)*(currentProbabilitiesRange[1])
+        trivialCount += perturbationCount*detectionTrials*calculateTPR(probabilities)
+        allPerturbationCount += perturbationCount*detectionTrials
+        newTPR = 1.0-trivialCount/allPerturbationCount
+        absDiff = 0
+        
+        if(oldTPR <0):
+            similarTrial+=1
+        else:
+            absDiff = abs(newTPR-oldTPR)/oldTPR
+            if(absDiff<fineError):
+                similarTrial+=1
+                
+        pbar.set_description("FINE Phase. Deviation: %g (target=%g) Trials" % (absDiff,fineError))
+        oldTPR = newTPR
+        pbar.reset()
+        pbar.update(similarTrial)
+    pbar.refresh()
+    pbar.close()
+    return currentProbabilitiesRange[1]*(1.0-trivialCount/allPerturbationCount)
+
+    # fineIterations = 0
+    # while(True):
+    #     currentDeviation = 0.0
+    #     for probIndex in range(len(probabilities)-1):
+    #         probability = probabilities[probIndex]
+    #         nextProbability = probabilities[probIndex+1]
+    #         if(TPRCurve[probIndex]<1.0 and TPRCurve[probIndex+1]==1.0):
+    #             fineRange = (0,nextProbability)
+    #             print("Refine Range",(probability,nextProbability))
+    #             currentDeviation = addPointProbability((probability+nextProbability)*0.5,coarseError)
+    #             break
+    #     pbar.set_description("COARSE Phase. Deviation: %g (target=%g) Trials" % (currentDeviation,coarseError))
+    #     pbar.reset()
+    #     pbar.update(similarTrial)
+        
+    #     if(currentDeviation<coarseError):
+    #         break
+                
+
+    # while(similarTrial<minSimilarTrials):
+    #     probability=random.random()*(fineRange[1]-fineRange[0])+fineRange[0]
+    #     absDiff = addPointProbability(probability,fineError)
+    #     pbar.set_description("FINE Phase. Deviation: %g (target=%g) Trials" % (absDiff,fineError))
+    #     pbar.reset()
+    #     pbar.update(similarTrial)
+    # pbar.refresh()
+    # pbar.close()
+    # if(outputCurves):
+    #     return (currentRModularity, np.array(probabilities), np.array(TPRCurve), np.array(DLCurvesTrivial), np.array(DLCurvesDetected))
+    # else:
+    #     return currentRModularity
+
+
+
