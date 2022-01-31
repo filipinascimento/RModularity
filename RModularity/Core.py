@@ -155,6 +155,8 @@ def RModularity(
         # Disabling internal multithreading of graph_tool
         gtOpenmp_set_num_threads(1)
 
+    if(useMultiprocessing):
+        pool = mp.Pool(processes=num_processors)
     for probabilityIndex, probability in enumerate(probabilitiesIterator):
         trivialCount = 0
         if(useMultiprocessing):
@@ -162,7 +164,6 @@ def RModularity(
                         detectionTrials)]*perturbationCount
             perturbationIndex = 0
 
-            pool = mp.Pool(processes=num_processors)
             for newTrivialCount, allDLDetected, allDLTrivial in tqdm(pool.imap_unordered(func=calculatePerturbedTrivialCount, iterable=allArgs), total=len(allArgs), desc="Perturbation", leave=False):
                 trivialCount += newTrivialCount
                 DLCurvesTrivial[probabilityIndex, perturbationIndex *
@@ -170,8 +171,7 @@ def RModularity(
                 DLCurvesDetected[probabilityIndex, perturbationIndex *
                                  detectionTrials:(perturbationIndex+1)*detectionTrials] = allDLDetected
                 perturbationIndex += 1
-            pool.terminate()
-            pool.close()
+
             TPRCurve[probabilityIndex] = trivialCount / \
                 (perturbationCount*detectionTrials)
         else:
@@ -188,7 +188,10 @@ def RModularity(
                 perturbationIndex += 1
             TPRCurve[probabilityIndex] = trivialCount / \
                 (perturbationCount*detectionTrials)
-
+    if(useMultiprocessing):
+        # pool.terminate()
+        pool.close()
+        pool.join()
     RModularity = 1.0-np.trapz(TPRCurve, probabilities)
 
     if(outputCurves):
@@ -295,11 +298,12 @@ def informationModularity(
     return 1-(DLDetected/DLTrivial)
 
 
-def RModularityFast(
+
+def RModularityFast_alt(
     nodeCount,
     edges,
     directed=False,
-    perturbationCount=24,
+    perturbationCount=48,
     detectionTrials=1,
     outputCurves=False,
     showProgress=True,
@@ -309,6 +313,7 @@ def RModularityFast(
     minSimilarTrials=3,
 ):
     """
+    Alternative implementation of the fast algorithm (currently unsupported)
     Computes the Robustness Modularity of a network.
 
     Parameters
@@ -459,26 +464,23 @@ def RModularityFast(
         return currentRModularity
 
 
-
-
-
-
-
-
-def RModularityFast2(
+def RModularityFast(
     nodeCount,
     edges,
     directed=False,
-    perturbationCount=24,
+    perturbationCount=48,
     detectionTrials=1,
     showProgress=True,
     useMultiprocessing=True,
-    coarseError = 0.02,
+    useCoarseStep = True,
     fineError=0.01,
+    coarseError = 0.02,
     minSimilarTrials=2,
 ):
     """
-    Computes the Robustness Modularity of a network.
+    Computes the approximated Robustness Modularity of a network
+    using a Monte-Carlo approach. Note that this approach can not
+    procude the curves of TPR.
 
     Parameters
     ----------
@@ -489,15 +491,13 @@ def RModularityFast2(
     directed : int, optional
         Whether the network is directed or not.
     perturbationCount : int, optional
-        The number of perturbations to perform.
-        (defaults to 24)
+        The number of perturbations to perform
+        at each step.
+        (defaults to 48)
     detectionTrials : int, optional
         The number of times to perform community
         detection for each perturbed network.
         (defaults to 1)
-    outputCurves : bool, optional
-        Whether to save the TPR and DL curves.
-        (defaults to False)
     showProgress : bool, optional
         Shows a progress bar if enabled.
         (defaults to True)
@@ -505,14 +505,23 @@ def RModularityFast2(
         Uses parallel processing to calculate
         Rmodularity.
         (defaults to True)
+    useCoarseStep: bool, optional
+        Finds the plateal region using a binary search before applying
+        the Monte-Carlo approach.
+        (defaults to True)
+    fineError: float, optional
+        Error tolerance for the fine step.
+        (defaults to 0.01)
+    coarseError: float, optional
+        Error tolerance for the coarse step.
+    minSimilarTrials: int, optional
+        The minimum number of similar trials to perform before 
+        stopping the Monte-Carlo approach.
+        (defaults to 2)
     Returns
     -------
     float 
         The RModularity of the network.
-    (float, np.array dim=1, np.array dim=1, np.array dim=2, np.array dim=2) if outputCurves is True
-        The tuple (RModularity, probabilities, TPR curves, DL Detected, DL Trivial) containing
-        the Robustness Modularity, the rewire probabilities, the TPR curves, the Description
-        lenghts for the detected and trivial partitions.
     """
     
     sortedOrder = []
@@ -523,6 +532,7 @@ def RModularityFast2(
         num_processors = mp.cpu_count()
         # Disabling internal multithreading of graph_tool
         gtOpenmp_set_num_threads(1)
+        pool = mp.Pool(processes=num_processors)
     def calculateTPR(probabilities):
         trivialCount = 0
         #check if probabilities is a number
@@ -534,20 +544,20 @@ def RModularityFast2(
                         detectionTrials) for index, probability in enumerate(probabilities)]
             perturbationIndex = 0
 
-            pool = mp.Pool(processes=num_processors)
-            for newTrivialCount, allDLDetected, allDLTrivial in \
-                tqdm(
-                    pool.imap_unordered(
-                        func=calculatePerturbedTrivialCount,
-                        iterable=allArgs
-                    ), 
+            poolIterator = pool.imap_unordered(
+                                func=calculatePerturbedTrivialCount,
+                                iterable=allArgs
+                            )
+            if(showProgress):
+                poolIterator = tqdm(poolIterator, 
                     total=len(allArgs),
                     desc="Perturbation", leave=False
-                ):
+                )
+            for newTrivialCount, allDLDetected, allDLTrivial in poolIterator:
                 trivialCount += newTrivialCount
                 perturbationIndex += 1
-            pool.terminate()
-            pool.close()
+            # pool.terminate()
+            # pool.close()
         else:
             for perturbationIndex,probability in enumerate(trange(0, probabilities, desc="Perturbation", leave=False)):
                 args = (nodeCount, edges, directed,
@@ -564,30 +574,36 @@ def RModularityFast2(
     lastRModularity = -1
     currentRModularity = -1
     currentProbabilitiesRange = [0.0,1.0]
-    pbar = tqdm(total = minSimilarTrials,leave=True)
+    if(showProgress):
+        pbar = tqdm(total = minSimilarTrials,leave=True)
+        pbar.set_description("COARSE phase. Calculating TPR for 0.0 to 1.0.")
     currentDeviation = 1.0
-    pbar.set_description("COARSE phase. Calculating TPR for 0.0 to 1.0.")
-        
-    currentTPRs = [calculateTPR(0.0),calculateTPR(1.0)]
-    threshold = 1.0
-    if(currentTPRs[0]<1.0 and currentTPRs[1]==1.0):
-        while(True):
-            threshold = (currentProbabilitiesRange[0]+currentProbabilitiesRange[1])*0.5
-            thresholdTPR = calculateTPR(threshold)
-            currentDeviation = abs(threshold-currentProbabilitiesRange[1])/currentProbabilitiesRange[1]
-            if(thresholdTPR==1.0):
-                currentProbabilitiesRange[1] = threshold
-            else:
-                currentProbabilitiesRange[0] = threshold
-            pbar.set_description("COARSE phase. Range: [%g - %g]. Deviation: %g (target=%g) Trials" % (currentProbabilitiesRange[0],currentProbabilitiesRange[1],currentDeviation,coarseError))
-            if(currentDeviation<coarseError):
-                break
-    elif(currentTPRs[0]==1.0):
-        return 0.0
-    
+    if(useCoarseStep):
+        currentTPRs = [calculateTPR(0.0),calculateTPR(1.0)]
+        # print("\n----\nCURRENT TPRS: ",currentTPRs)
+        threshold = 1.0
+        if(currentTPRs[0]<1.0 and currentTPRs[1]==1.0):
+            while(True):
+                threshold = (currentProbabilitiesRange[0]+currentProbabilitiesRange[1])*0.5
+                thresholdTPR = calculateTPR(threshold)
+                currentDeviation = abs(threshold-currentProbabilitiesRange[1])/currentProbabilitiesRange[1]
+                if(thresholdTPR==1.0):
+                    currentProbabilitiesRange[1] = threshold
+                else:
+                    currentProbabilitiesRange[0] = threshold
+                if(showProgress):
+                    pbar.set_description("COARSE phase. Range: [%g - %g]. Deviation: %g (target=%g) Trials" % (currentProbabilitiesRange[0],currentProbabilitiesRange[1],currentDeviation,coarseError))
+                if(currentDeviation<coarseError):
+                    break
+        elif(currentTPRs[0]==1.0):
+            if(useMultiprocessing):
+                pool.close()
+                pool.join()
+            return 0.0
     oldTPR = -1
     trivialCount= 0
     allPerturbationCount = 0
+    # print("\n----\nCURRENT PROBABILITIES RANGE: ",currentProbabilitiesRange)
     while(similarTrial<minSimilarTrials):
         probabilities=np.random.random(perturbationCount)*(currentProbabilitiesRange[1])
         trivialCount += perturbationCount*detectionTrials*calculateTPR(probabilities)
@@ -595,52 +611,28 @@ def RModularityFast2(
         newTPR = 1.0-trivialCount/allPerturbationCount
         absDiff = 0
         
-        if(oldTPR <0):
+        if(oldTPR < 0):
             similarTrial+=1
+        if(oldTPR < 1e-20): # zero
+            absDiff = abs(newTPR-oldTPR)
+            if(absDiff<fineError):
+                similarTrial+=1
         else:
             absDiff = abs(newTPR-oldTPR)/oldTPR
             if(absDiff<fineError):
                 similarTrial+=1
-                
-        pbar.set_description("FINE Phase. Deviation: %g (target=%g) Trials" % (absDiff,fineError))
-        oldTPR = newTPR
-        pbar.reset()
-        pbar.update(similarTrial)
-    pbar.refresh()
-    pbar.close()
-    return currentProbabilitiesRange[1]*(1.0-trivialCount/allPerturbationCount)
-
-    # fineIterations = 0
-    # while(True):
-    #     currentDeviation = 0.0
-    #     for probIndex in range(len(probabilities)-1):
-    #         probability = probabilities[probIndex]
-    #         nextProbability = probabilities[probIndex+1]
-    #         if(TPRCurve[probIndex]<1.0 and TPRCurve[probIndex+1]==1.0):
-    #             fineRange = (0,nextProbability)
-    #             print("Refine Range",(probability,nextProbability))
-    #             currentDeviation = addPointProbability((probability+nextProbability)*0.5,coarseError)
-    #             break
-    #     pbar.set_description("COARSE Phase. Deviation: %g (target=%g) Trials" % (currentDeviation,coarseError))
-    #     pbar.reset()
-    #     pbar.update(similarTrial)
         
-    #     if(currentDeviation<coarseError):
-    #         break
-                
-
-    # while(similarTrial<minSimilarTrials):
-    #     probability=random.random()*(fineRange[1]-fineRange[0])+fineRange[0]
-    #     absDiff = addPointProbability(probability,fineError)
-    #     pbar.set_description("FINE Phase. Deviation: %g (target=%g) Trials" % (absDiff,fineError))
-    #     pbar.reset()
-    #     pbar.update(similarTrial)
-    # pbar.refresh()
-    # pbar.close()
-    # if(outputCurves):
-    #     return (currentRModularity, np.array(probabilities), np.array(TPRCurve), np.array(DLCurvesTrivial), np.array(DLCurvesDetected))
-    # else:
-    #     return currentRModularity
-
-
+        oldTPR = newTPR
+        
+        if(showProgress):
+            pbar.set_description("FINE Phase. Deviation: %g (target=%g) Trials" % (absDiff,fineError))
+            pbar.reset()
+            pbar.update(similarTrial)
+    if(showProgress):
+        pbar.refresh()
+        pbar.close()
+    if(useMultiprocessing):
+        pool.close()
+        pool.join()
+    return currentProbabilitiesRange[1]*(1.0-trivialCount/allPerturbationCount)
 

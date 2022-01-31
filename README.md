@@ -74,7 +74,17 @@ if __name__ == '__main__':
     g = ig.Graph.Read_GML(str(Path("SampleNetworks")/("%s.gml" % networkName)))
 ```
 
-You can calculate the robustness of the modularity using the `RModularity` function:
+You can calculate the approximated robustness modularity using the `RModularityFast` function, which implements the fast Monte-Carlo algorithm.
+```python
+    Q_rA = RModularity.RModularityFast(
+        g.vcount(), # Number of nodes
+        g.get_edgelist(), # Edges list
+        g.is_directed(), # Directed or not
+        )
+    print("Q_rA = ", Q_rA)
+```
+
+You can use the `RModularity` function to calculate the robustness modularity without approximations:
 ```python
     Q_r, probabilities, TPRCurve, \
      DLCurvesTrivial, DLCurvesDetected = RModularity.RModularity(
@@ -215,6 +225,61 @@ Please refer to the next section for more details on how to use this library.
 
 
 ## Full API documentation
+
+### <kbd>function</kbd> `RModularityFast`
+```python
+RModularity(
+    nodeCount,
+    edges,
+    directed=False,
+    perturbationCount=48,
+    detectionTrials=1,
+    showProgress=True,
+    useMultiprocessing=True,
+    useCoarseStep = True,
+    fineError=0.01,
+    coarseError = 0.02,
+    minSimilarTrials=2,
+)
+```
+
+Computes the approximated Robustness Modularity of a network
+using a Monte-Carlo approach. Note that this approach can not
+procude the curves of TPR.
+
+Parameters 
+  * `nodeCount` : `int`  
+    The number of nodes in the network.
+  * `edges` : list of tuples  
+    A list of the edges in the network.
+  * `directed` : `int`, optional  
+    Whether the network is directed or not.
+  * `perturbationCount` : `int`, optional  
+    The number of perturbations to perform.  (defaults to 25)
+  * `detectionTrials` : `int`, optional  
+    The number of times to perform community  detection for each perturbed network. (defaults to 1)
+  * `rewireResolution` : `int`, optional  
+    The number values points for the rewire  probabilities (from 0 to 1) to calculate  the Trivial Partition Ratio (TPR) curves  and Robustness Modularity. (defaults to 51)
+  * `showProgress` : `bool`, optional  
+    Shows a progress bar if enabled.  (defaults to True)
+  * `useMultiprocessing`: `bool`, optional  
+    Uses parallel processing to calculate  Rmodularity.  (defaults to True)
+  * `useCoarseStep`: `bool`, optional
+    Finds the plateal region using a binary search before applying
+    the Monte-Carlo approach. (defaults to True)
+  * `fineError`: `float`, optional
+    Error tolerance for the fine step. (defaults to 0.01)
+  * `coarseError`: `float`, optional
+      Error tolerance for the coarse step. (defaults to 0.02)
+  * `minSimilarTrials`: `int`, optional
+      The minimum number of similar trials to perform before 
+      stopping the Monte-Carlo approach.(defaults to 2)
+Returns 
+  * `float` if `outputCurves` is `False`  
+    The Robustness Modularity of the network.
+
+
+---
 
 ### <kbd>function</kbd> `RModularity`
 ```python
