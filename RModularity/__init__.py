@@ -1,3 +1,3 @@
-from .Core import RModularity as RModularity, modularityDifference, informationModularity
+from .Core import RModularity as RModularity,RModularityFast,modularityDifference,informationModularity 
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"

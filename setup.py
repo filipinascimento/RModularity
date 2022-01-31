@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="RModularity",
-    version="0.1.1",
+    version="0.2.0",
     author="Filipi N. Silva",
     author_email="filipi@iu.edu",
     description="Python library to calculate Robustness modularity of networks",
