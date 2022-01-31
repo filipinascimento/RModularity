@@ -274,6 +274,7 @@ Parameters
   * `minSimilarTrials`: `int`, optional
       The minimum number of similar trials to perform before 
       stopping the Monte-Carlo approach.(defaults to 2)
+
 Returns 
   * `float` if `outputCurves` is `False`  
     The Robustness Modularity of the network.
