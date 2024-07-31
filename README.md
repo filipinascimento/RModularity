@@ -34,12 +34,12 @@ conda install -c conda-forge graph-tool
 After installing `graph-tool` dependency, the tool can be installed using pip:
 
 ```bash
-pip install RModularity python-igraph louvain
+pip install python-igraph louvain RModularity
 ```
 
 or from source:
 ```bash
-pip git+https://github.com/filipinascimento/RModularity.git
+pip install python-igraph louvain git+https://github.com/filipinascimento/RModularity.git
 ```
 
 ## Usage
